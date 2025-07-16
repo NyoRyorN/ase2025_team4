@@ -54,9 +54,6 @@ func main() {
   timer := time.NewTicker(time.Duration(totalSeconds) * time.Second)
   defer timer.Stop()
 
-//   ticker := time.NewTicker(time.Second)
-//   defer ticker.Stop()
-
 	// ゴルーチンで残り時間更新
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -69,7 +66,6 @@ func main() {
 				if rem < 0 {
 					return
 				}
-				// ── ここがポイント ──
 				// 1) カーソル位置を保存
 				fmt.Print("\0337")
 				// 2) 上の行に移動し、行全体をクリア
@@ -94,17 +90,6 @@ func main() {
 
   fmt.Println("Please guess a 4-letter string. Each letter should be a lowercase letter from 'a' to 'z'. (e.g., 'abcd').")
   for {
-	// select {
-	// case <-ticker.C:
-    //   remaining := time.Until(deadline)
-    //   sec := int(remaining.Seconds())
-    //   if sec < 0 {
-    //     sec = 0
-    //   }
-    //     fmt.Printf("\r残り時間: %02d秒", sec)
-    //   default:
-    //     // ティッカーをブロックせずに次へ  
-	// }
     fmt.Printf("\nEnter your guess: ")
     _,error := fmt.Scanf("%s", &userString)
     if error != nil {
@@ -118,8 +103,6 @@ func main() {
       hits, blows := hitAndBlow(userString,correctString)
       fmt.Printf("\n結果: %d Hit(s), %d Blow(s)\n", hits, blows)
       if hits == len(correctString){
-        // timer.Stop()
-        // ticker.Stop()
 		fmt.Println("\n🎉 Congratulations! You've guessed correctly!")
 		os.Exit(0)
       } else {
