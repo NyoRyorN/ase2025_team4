@@ -3,25 +3,52 @@ import (
     "fmt"
     "math/rand"
     "time"
-	"os"
+    "os"
+    "encoding/json"
+    "io"
+    "net/http"
+    "net/url"
+    "strconv"
+    "log"
 )
- 
-const letters = "abcdefghijklmnopqrstuvwxyz"
- 
-func RandomString(n int) string{
-    if n <= 0{
-        return ""
-    }
- 
-    rand.Seed(time.Now().UnixNano())
-    b := make([]byte, n)
- 
-    for i := range b {
-        b[i] = letters[rand.Intn(len(letters))]
-    }
- 
-    return string(b)
+
+func getCorrectString(desiredLength int)(correctString string){
+  baseURL := "https://random-word-api.herokuapp.com/word"
+	params := url.Values{}
+	params.Add("length", strconv.Itoa(desiredLength))
+	// 英語はデフォルトなので通常不要ですが、明示的に指定する場合は以下を追加
+	// params.aaaAdd("lang", "en")
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	// HTTP GETリクエストを送信
+	resp, err := http.Get(fullURL)
+	if err != nil {
+    fmt.Println("Failed to send API request: %v\n")
+		return
+	}
+	defer resp.Body.Close() // 関数終了時にレスポンスボディを閉じる
+
+	// HTTPステータスコードの確認
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Error response from API: Status code %d\n", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body) // Read body for more details
+		log.Fatalf("Response Body: %s\n", string(bodyBytes))
+		return
+	}
+
+	// レスポンスボディを読み込み
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+    log.Fatalf("Failed to read response body: %v\n", err)
+		return
+	}
+  var word []string
+  json.Unmarshal(body, &word)
+
+  return word[0]
 }
+
 
 func hitAndBlow(userString, correctString string)( hits int,  blows int ){
   // Hit数とBlow数を計算
@@ -43,9 +70,9 @@ func hitAndBlow(userString, correctString string)( hits int,  blows int ){
 
 func inputLength () (stringLength int){
   for {
-    fmt.Printf("Enter your string length: ")
+    fmt.Printf("Enter your string length(max:10): ")
     _,err := fmt.Scanf("%d", &stringLength)
-    if err != nil || 1 > stringLength {
+    if err != nil || stringLength < 1 || 10 < stringLength  {
 			fmt.Println("No valid integer was detected. Please try again.")
 			continue // エラーが発生したらループの先頭に戻り再入力を促す
     }
@@ -59,7 +86,7 @@ func main() {
   const totalSeconds = 30 // Total time allowed for guessing
   var userString string
   stringLength := inputLength()
-  correctString := RandomString(stringLength) // This is the correct number to guess
+  correctString := getCorrectString(stringLength) // This is the correct number to guess
 
   begin := time.Now()
   deadline := begin.Add(time.Duration(totalSeconds) * time.Second)
