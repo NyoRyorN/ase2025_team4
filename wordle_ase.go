@@ -48,52 +48,69 @@ func main() {
   var userString string
   correctString := RandomString(4) // This is the correct number to guess
 
-  begin := time.Now()
-  deadline := begin.Add(time.Duration(totalSeconds) * time.Second)
+//   begin := time.Now()
+//   deadline := begin.Add(time.Duration(totalSeconds) * time.Second)
 
   timer := time.NewTicker(time.Duration(totalSeconds) * time.Second)
   defer timer.Stop()
 
-  ticker := time.NewTicker(time.Second)
-  defer ticker.Stop()
+//   ticker := time.NewTicker(time.Second)
+//   defer ticker.Stop()
 
   go func() {
-  	<-timer.C
-    fmt.Printf("\r残り時間: 00秒\n")
-	fmt.Println("Time's up! You didn't guess in time.")
-	fmt.Println("The correct string was:", correctString)
-	os.Exit(0)
-  }()
+    ticker := time.NewTicker(1 * time.Second)
+    defer ticker.Stop()
+
+      remaining := totalSeconds
+      for {
+        select {
+        case <-ticker.C:
+          remaining--
+          if remaining < 0 {
+            return
+          }
+          // \r で同じ行を上書き
+        fmt.Printf("\r残り時間: %02d秒: Enter your guess:  ", remaining)
+        case <-timer.C:
+          // タイムアップ時の最後の表示
+          fmt.Printf("\r残り時間: 00秒")
+          fmt.Println("Time's up! You didn't guess in time.")
+          fmt.Println("The correct string was:", correctString)
+          os.Exit(0)
+        }
+      }
+    }()
 
   fmt.Println("Please guess a 4-letter string. Each letter should be a lowercase letter from 'a' to 'z'. (e.g., 'abcd').")
   for {
-	select {
-	case <-ticker.C:
-      remaining := time.Until(deadline)
-      sec := int(remaining.Seconds())
-      if sec < 0 {
-        sec = 0
-      }
-        fmt.Printf("\r残り時間: %02d秒", sec)
-      default:
-        // ティッカーをブロックせずに次へ  
-	}
+	// select {
+	// case <-ticker.C:
+    //   remaining := time.Until(deadline)
+    //   sec := int(remaining.Seconds())
+    //   if sec < 0 {
+    //     sec = 0
+    //   }
+    //     fmt.Printf("\r残り時間: %02d秒", sec)
+    //   default:
+    //     // ティッカーをブロックせずに次へ  
+	// }
     fmt.Printf("\nEnter your guess: ")
     _,error := fmt.Scanf("%s", &userString)
     if error != nil {
       fmt.Println("Error reading input. Please try again.")
       continue
     }
+
     // Check if the input is a valid n-string
     if len(userString) == len(correctString) {
       fmt.Print("Input length matches! You entered: ", userString, "\n")
       hits, blows := hitAndBlow(userString,correctString)
       fmt.Printf("\n結果: %d Hit(s), %d Blow(s)\n", hits, blows)
       if hits == len(correctString){
-        timer.Stop()
-        ticker.Stop()
+        // timer.Stop()
+        // ticker.Stop()
 		fmt.Println("\n🎉 Congratulations! You've guessed correctly!")
-		break
+		os.Exit(0)
       } else {
 		fmt.Println("\n Wrong guess! Try again.")
 	  }
