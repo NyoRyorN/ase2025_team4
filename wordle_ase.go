@@ -58,9 +58,14 @@ func main() {
     // Check if the input is a valid n-string
     if len(userString) == len(correctString) {
       fmt.Print("Input length matches! You entered: ", userString, "\n")
-      break
-    }
+      hits, blows := hitAndBlow(userString,correctString)
+      fmt.Printf("結果: %d Hit(s), %d Blow(s)\n", hits, blows)
+      if hits == len(correctString){
+        break
+      }
+    }else{
     fmt.Printf("Length mismatch. Please enter exactly %d characters.\n", len(correctString))
+    }
   }
 
   for i := 0; i < len(userString); i++ {
@@ -89,5 +94,23 @@ func main() {
   fmt.Println(correctString)
 
   fmt.Println("Congratulations! You've guessed the number correctly!")
+}
+
+func hitAndBlow (userString,correctString string)( hits int,  blows int ){
+  // Hit数とBlow数を計算
+    correctStringMap := make(map[rune]int)
+    for i ,char := range correctString {
+      correctStringMap[char] = i
+    }
+    for i, char := range userString {
+        if secretIndex, ok := correctStringMap[char]; ok {
+            if i == secretIndex {
+                hits++ // 桁と文字が両方一致
+            } else {
+                blows++ // 文字は一致するが桁が異なる
+            }
+        }
+    }
+    return hits, blows
 }
  
