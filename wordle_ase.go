@@ -41,12 +41,25 @@ func hitAndBlow(userString, correctString string)( hits int,  blows int ){
     return hits, blows
 }
 
+func inputLength () (stringLength int){
+  for {
+    fmt.Printf("Enter your string length: ")
+    _,err := fmt.Scanf("%d", &stringLength)
+    if err != nil || 1 > stringLength {
+			fmt.Println("No valid integer was detected. Please try again.")
+			continue // エラーが発生したらループの先頭に戻り再入力を促す
+    }
+    return stringLength
+  }
+}
+
 func main() {
   fmt.Println("Welcome to Hit and Blow!")
   // var correctNumber int 
   const totalSeconds = 30 // Total time allowed for guessing
   var userString string
-  correctString := RandomString(4) // This is the correct number to guess
+  stringLength := inputLength()
+  correctString := RandomString(stringLength) // This is the correct number to guess
 
   begin := time.Now()
   deadline := begin.Add(time.Duration(totalSeconds) * time.Second)
@@ -88,7 +101,7 @@ func main() {
 		}
 	}()
 
-  fmt.Println("Please guess a 4-letter string. Each letter should be a lowercase letter from 'a' to 'z'. (e.g., 'abcd').")
+  fmt.Println("Please guess a", stringLength ,"-letter string. Each letter should be a lowercase letter from 'a' to 'z'. (e.g., 'abcd').")
   for {
     fmt.Printf("\nEnter your guess: ")
     _,error := fmt.Scanf("%s", &userString)
@@ -113,5 +126,3 @@ func main() {
     }
   }
 }
-
- 
