@@ -31,7 +31,7 @@ func main() {
   fmt.Println("Please guess a 4-letter string. Each letter should be a lowercase letter from 'a' to 'z'. (e.g., 'abcd').")
   for {
     fmt.Printf("Enter your guess: ")
-    _,error := fmt.Scanf("%s",&userString)
+    _,error := fmt.Scanf("%s", &userString)
     if error != nil {
       fmt.Println("Error reading input. Please try again.")
       continue
@@ -43,7 +43,7 @@ func main() {
     }
     fmt.Printf("Length mismatch. Please enter exactly %d characters.\n", len(correctString))
   }
-  fmt.Println(conrrectString)
+  fmt.Println(correctString)
 
   fmt.Println("Congratulations! You've guessed the number correctly!")
 }
