@@ -514,7 +514,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div class="container">
-        <h1>🎯 Word Detective</h1>
+        <h1>🕵️ Word Detective</h1>
         
         <div class="game-setup">
             <div class="setup-row">
