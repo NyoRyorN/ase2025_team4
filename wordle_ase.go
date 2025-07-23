@@ -35,7 +35,7 @@ type Guess struct {
 	Input string `json:"input"`
 	Hits  int    `json:"hits"`
 	Blows int    `json:"blows"`
-	Time  string `json:"time"`
+	// Time  string `json:"time"`
 }
 
 type GameRequest struct {
@@ -342,7 +342,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 						Input: userInput,
 						Hits:  hits,
 						Blows: blows,
-						Time:  time.Now().Format("15:04:05"),
+						// Time:  time.Now().Format("15:04:05"),
 					}
 					currentGame.Guesses = append(currentGame.Guesses, guess)
 
@@ -628,8 +628,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                 div.className = 'guess-item';
                 div.innerHTML = 
                     '<span class="guess-input">' + guess.input + '</span>' +
-                    '<span class="guess-result">' + guess.hits + ' Hit(s), ' + guess.blows + ' Blow(s)</span>' +
-                    '<span>' + guess.time + '</span>';
+                    '<span class="guess-result">' + guess.hits + ' Hit(s), ' + guess.blows + ' Blow(s)</span>';
                 guessList.appendChild(div);
             });
         }
