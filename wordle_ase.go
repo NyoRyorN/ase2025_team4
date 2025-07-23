@@ -266,7 +266,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 			currentGame = startNewGame(req.StringLength, req.HintsEnabled)
 			resp = GameResponse{
 				Success:       true,
-				Message:       fmt.Sprintf("ゲームを開始しました（%d文字、ヒント: %v）", req.StringLength, req.HintsEnabled),
+				Message:       fmt.Sprintf("ゲームを開始しました"),
 				GameSession:   currentGame,
 				TimeRemaining: currentGame.getRemainingTime(),
 				HintDisplay:   currentGame.getHintDisplay(),
@@ -714,7 +714,7 @@ func main() {
 	http.HandleFunc("/api", handleAPI)
 
 	fmt.Println("Hit and Blow Game サーバーを開始します...")
-	fmt.Println("ブラウザで http://localhost:8080 にアクセスしてください")
+	fmt.Println("ブラウザで http://localhost:8081 にアクセスしてください")
 	
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8081", nil))
 }
