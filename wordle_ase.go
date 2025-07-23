@@ -109,22 +109,17 @@ func hitAndBlow(userString, correctString string) (hits int, blows int) {
 	correctRunes := []rune(correctString)
 
 	correctUsed := make([]bool, length)
-	userUsed := make([]bool, length)
 
 	// 第1パス：Hitを計算
 	for i := 0; i < length; i++ {
 		if userRunes[i] == correctRunes[i] {
 			hits++
 			correctUsed[i] = true
-			userUsed[i] = true
 		}
 	}
 
 	// 第2パス：Blowを計算
 	for i := 0; i < length; i++ {
-		if userUsed[i] {
-			continue
-		}
 
 		for j := 0; j < length; j++ {
 			if correctUsed[j] {
