@@ -5,22 +5,30 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"math/rand"
 	"net/http"
-	// "strconv"
 	"time"
+	"io"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
 )
 
 const letters = "abcdefghijklmnopqrstuvwxyz"
 
 type GameSession struct {
-	CorrectString string    `json:"correctString"`
-	StringLength  int       `json:"stringLength"`
-	StartTime     time.Time `json:"startTime"`
-	GameStarted   bool      `json:"gameStarted"`
-	GameOver      bool      `json:"gameOver"`
-	Won           bool      `json:"won"`
-	Guesses       []Guess   `json:"guesses"`
+	CorrectString   string    `json:"correctString"`
+	StringLength    int       `json:"stringLength"`
+	StartTime       time.Time `json:"startTime"`
+	GameStarted     bool      `json:"gameStarted"`
+	GameOver        bool      `json:"gameOver"`
+	Won             bool      `json:"won"`
+	Guesses         []Guess   `json:"guesses"`
+	HintsEnabled    bool      `json:"hintsEnabled"`
+	RevealedLetters []bool    `json:"revealedLetters"`
+	BlowCharacters  map[rune]bool `json:"blowCharacters"`
+	RevealedCount   int       `json:"revealedCount"`
+	NextHintTime    time.Time `json:"nextHintTime"`
 }
 
 type Guess struct {
@@ -34,6 +42,7 @@ type GameRequest struct {
 	Action       string `json:"action"`
 	StringLength int    `json:"stringLength,omitempty"`
 	Guess        string `json:"guess,omitempty"`
+	HintsEnabled bool   `json:"hintsEnabled,omitempty"`
 }
 
 type GameResponse struct {
@@ -41,51 +50,171 @@ type GameResponse struct {
 	Message       string       `json:"message,omitempty"`
 	GameSession   *GameSession `json:"gameSession,omitempty"`
 	TimeRemaining int          `json:"timeRemaining,omitempty"`
+	HintDisplay   string       `json:"hintDisplay,omitempty"`
 }
 
 var currentGame *GameSession
+var mu sync.Mutex
+
+func getCorrectString(desiredLength int) string {
+	baseURL := "https://random-word-api.herokuapp.com/word"
+	params := url.Values{}
+	params.Add("length", strconv.Itoa(desiredLength))
+
+	fullURL := baseURL + "?" + params.Encode()
+
+	resp, err := http.Get(fullURL)
+	if err != nil {
+		fmt.Printf("Failed to send API request: %v\n", err)
+		return RandomString(desiredLength) // フォールバックとしてランダム文字列を使用
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Error response from API: Status code %d\n", resp.StatusCode)
+		return RandomString(desiredLength) // フォールバックとしてランダム文字列を使用
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Failed to read response body: %v\n", err)
+		return RandomString(desiredLength) // フォールバックとしてランダム文字列を使用
+	}
+
+	var words []string
+	err = json.Unmarshal(body, &words)
+	if err != nil || len(words) == 0 {
+		fmt.Printf("Failed to parse API response: %v\n", err)
+		return RandomString(desiredLength) // フォールバックとしてランダム文字列を使用
+	}
+
+	return strings.ToLower(words[0])
+}
 
 func RandomString(n int) string {
 	if n <= 0 {
 		return ""
 	}
 
-	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, n)
-
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[i%len(letters)]
 	}
-
 	return string(b)
 }
 
 func hitAndBlow(userString, correctString string) (hits int, blows int) {
-	correctStringMap := make(map[rune]int)
-	for i, char := range correctString {
-		correctStringMap[char] = i
+	length := len(correctString)
+	userRunes := []rune(userString)
+	correctRunes := []rune(correctString)
+
+	correctUsed := make([]bool, length)
+	userUsed := make([]bool, length)
+
+	// 第1パス：Hitを計算
+	for i := 0; i < length; i++ {
+		if userRunes[i] == correctRunes[i] {
+			hits++
+			correctUsed[i] = true
+			userUsed[i] = true
+		}
 	}
-	for i, char := range userString {
-		if secretIndex, ok := correctStringMap[char]; ok {
-			if i == secretIndex {
-				hits++
-			} else {
+
+	// 第2パス：Blowを計算
+	for i := 0; i < length; i++ {
+		if userUsed[i] {
+			continue
+		}
+
+		for j := 0; j < length; j++ {
+			if correctUsed[j] {
+				continue
+			}
+
+			if userRunes[i] == correctRunes[j] {
 				blows++
+				correctUsed[j] = true
+				break
 			}
 		}
 	}
+
 	return hits, blows
 }
 
-func startNewGame(length int) *GameSession {
-	return &GameSession{
-		CorrectString: RandomString(length),
-		StringLength:  length,
-		StartTime:     time.Now(),
-		GameStarted:   true,
-		GameOver:      false,
-		Won:           false,
-		Guesses:       make([]Guess, 0),
+func startNewGame(length int, hintsEnabled bool) *GameSession {
+	correctString := getCorrectString(length)
+	fmt.Printf("新しいゲーム開始: 文字数=%d, 正解=%s, ヒント=%v\n", length, correctString, hintsEnabled)
+	
+	game := &GameSession{
+		CorrectString:   correctString,
+		StringLength:    length,
+		StartTime:       time.Now(),
+		GameStarted:     true,
+		GameOver:        false,
+		Won:             false,
+		Guesses:         make([]Guess, 0),
+		HintsEnabled:    hintsEnabled,
+		RevealedLetters: make([]bool, length),
+		BlowCharacters:  make(map[rune]bool),
+		RevealedCount:   0,
+	}
+
+	if hintsEnabled {
+		hintInterval := time.Duration(30/length) * time.Second
+		game.NextHintTime = game.StartTime.Add(hintInterval)
+		
+		// ヒント更新のゴルーチンを開始
+		go updateHints(game)
+	}
+
+	return game
+}
+
+func updateHints(game *GameSession) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for !game.GameOver {
+		select {
+		case <-ticker.C:
+			if time.Now().After(game.NextHintTime) && game.RevealedCount < game.StringLength-1 {
+				mu.Lock()
+				hintGiven := false
+				
+				// まずBlow文字から優先してヒントを出す
+				for charToReveal := range game.BlowCharacters {
+					for i, correctChar := range game.CorrectString {
+						if charToReveal == correctChar && !game.RevealedLetters[i] && i < game.StringLength-1 {
+							game.RevealedLetters[i] = true
+							game.RevealedCount++
+							hintGiven = true
+							delete(game.BlowCharacters, charToReveal)
+							break
+						}
+					}
+					if hintGiven {
+						break
+					}
+				}
+
+				// Blow文字がない場合は順番に公開
+				if !hintGiven {
+					for i := 0; i < game.StringLength-1; i++ {
+						if !game.RevealedLetters[i] {
+							game.RevealedLetters[i] = true
+							game.RevealedCount++
+							break
+						}
+					}
+				}
+
+				hintInterval := time.Duration(30/game.StringLength) * time.Second
+				game.NextHintTime = game.NextHintTime.Add(hintInterval)
+				mu.Unlock()
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -99,6 +228,23 @@ func (gs *GameSession) getRemainingTime() int {
 		remaining = 0
 	}
 	return remaining
+}
+
+func (gs *GameSession) getHintDisplay() string {
+	if !gs.HintsEnabled {
+		return ""
+	}
+	
+	var hint strings.Builder
+	for i, char := range gs.CorrectString {
+		if gs.RevealedLetters[i] {
+			hint.WriteRune(char)
+			hint.WriteString(" ")
+		} else {
+			hint.WriteString("_ ")
+		}
+	}
+	return hint.String()
 }
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {
@@ -117,13 +263,13 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		if req.StringLength < 1 || req.StringLength > 10 {
 			resp = GameResponse{Success: false, Message: "文字数は1-10の間で選択してください"}
 		} else {
-			currentGame = startNewGame(req.StringLength)
-			fmt.Printf("新しいゲーム開始: 文字数=%d, 正解=%s\n", currentGame.StringLength, currentGame.CorrectString)
+			currentGame = startNewGame(req.StringLength, req.HintsEnabled)
 			resp = GameResponse{
 				Success:       true,
-				Message:       fmt.Sprintf("ゲームを開始しました（%d文字）", req.StringLength),
+				Message:       fmt.Sprintf("ゲームを開始しました（%d文字、ヒント: %v）", req.StringLength, req.HintsEnabled),
 				GameSession:   currentGame,
 				TimeRemaining: currentGame.getRemainingTime(),
+				HintDisplay:   currentGame.getHintDisplay(),
 			}
 		}
 
@@ -145,13 +291,13 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		} else {
 			userInput := req.Guess
 
-			// 入力検証
 			if len(userInput) != currentGame.StringLength {
 				resp = GameResponse{
 					Success:       false,
 					Message:       fmt.Sprintf("長さが違います。%d文字で入力してください。", currentGame.StringLength),
 					GameSession:   currentGame,
 					TimeRemaining: currentGame.getRemainingTime(),
+					HintDisplay:   currentGame.getHintDisplay(),
 				}
 			} else {
 				valid := true
@@ -168,8 +314,29 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 						Message:       "小文字のアルファベット (a-z) のみ使用してください。",
 						GameSession:   currentGame,
 						TimeRemaining: currentGame.getRemainingTime(),
+						HintDisplay:   currentGame.getHintDisplay(),
 					}
 				} else {
+					// ヒント機能のための処理
+					if currentGame.HintsEnabled {
+						mu.Lock()
+						correctStringMapForCheck := make(map[rune]bool)
+						for _, c := range currentGame.CorrectString {
+							correctStringMapForCheck[c] = true
+						}
+						for i, userChar := range userInput {
+							if userChar == rune(currentGame.CorrectString[i]) && i < currentGame.StringLength-1 {
+								if !currentGame.RevealedLetters[i] {
+									currentGame.RevealedLetters[i] = true
+									currentGame.RevealedCount++
+								}
+							} else if _, exists := correctStringMapForCheck[userChar]; exists {
+								currentGame.BlowCharacters[userChar] = true
+							}
+						}
+						mu.Unlock()
+					}
+
 					hits, blows := hitAndBlow(userInput, currentGame.CorrectString)
 					guess := Guess{
 						Input: userInput,
@@ -188,6 +355,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 							Message:       "🎉 おめでとうございます！正解です！",
 							GameSession:   currentGame,
 							TimeRemaining: currentGame.getRemainingTime(),
+							HintDisplay:   currentGame.getHintDisplay(),
 						}
 					} else {
 						resp = GameResponse{
@@ -195,6 +363,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 							Message:       "間違いです。もう一度試してください。",
 							GameSession:   currentGame,
 							TimeRemaining: currentGame.getRemainingTime(),
+							HintDisplay:   currentGame.getHintDisplay(),
 						}
 					}
 				}
@@ -219,6 +388,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 				Success:       true,
 				GameSession:   currentGame,
 				TimeRemaining: currentGame.getRemainingTime(),
+				HintDisplay:   currentGame.getHintDisplay(),
 			}
 		}
 
@@ -257,12 +427,29 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         .game-setup {
             margin-bottom: 20px;
         }
+        .setup-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 10px 0;
+        }
         .timer {
             font-size: 18px;
             font-weight: bold;
             text-align: center;
             margin: 10px 0;
             color: #d32f2f;
+        }
+        .hint-display {
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #fff3e0;
+            border-radius: 5px;
+            font-family: monospace;
+            color: #e65100;
         }
         .status {
             text-align: center;
@@ -287,6 +474,9 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         }
         input[type="text"] {
             flex: 1;
+        }
+        input[type="checkbox"] {
+            transform: scale(1.2);
         }
         button {
             background-color: #1976d2;
@@ -327,20 +517,30 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
         <h1>🎯 Hit and Blow Game</h1>
         
         <div class="game-setup">
-            <label>文字数を選択: 
-                <select id="lengthSelect">
-                    <option value="3">3文字</option>
-                    <option value="4" selected>4文字</option>
-                    <option value="5">5文字</option>
-                    <option value="6">6文字</option>
-                    <option value="7">7文字</option>
-                    <option value="8">8文字</option>
-                </select>
-            </label>
-            <button id="startBtn" onclick="startGame()">新しいゲーム開始</button>
+            <div class="setup-row">
+                <label>文字数を選択: 
+                    <select id="lengthSelect">
+                        <option value="3">3文字</option>
+                        <option value="4" selected>4文字</option>
+                        <option value="5">5文字</option>
+                        <option value="6">6文字</option>
+                        <option value="7">7文字</option>
+                        <option value="8">8文字</option>
+                    </select>
+                </label>
+            </div>
+            <div class="setup-row">
+                <label>
+                    <input type="checkbox" id="hintsEnabled"> ヒントを有効にする
+                </label>
+            </div>
+            <div class="setup-row">
+                <button id="startBtn" onclick="startGame()">新しいゲーム開始</button>
+            </div>
         </div>
 
         <div class="timer" id="timer">ゲームを開始してください</div>
+        <div class="hint-display" id="hintDisplay" style="display: none;"></div>
         
         <div class="status info" id="status">「新しいゲーム開始」ボタンを押してください</div>
 
@@ -367,11 +567,12 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
         function startGame() {
             const length = parseInt(document.getElementById('lengthSelect').value);
+            const hintsEnabled = document.getElementById('hintsEnabled').checked;
             
             fetch('/api', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: 'start', stringLength: length})
+                body: JSON.stringify({action: 'start', stringLength: length, hintsEnabled: hintsEnabled})
             })
             .then(response => response.json())
             .then(data => {
@@ -380,11 +581,13 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                     document.getElementById('guessBtn').disabled = false;
                     document.getElementById('startBtn').disabled = true;
                     document.getElementById('lengthSelect').disabled = true;
+                    document.getElementById('hintsEnabled').disabled = true;
                     document.getElementById('guessInput').focus();
                     document.getElementById('guesses').style.display = 'none';
                     document.getElementById('guessList').innerHTML = '';
                     
                     updateStatus(data.message, 'success');
+                    updateHintDisplay(data.hintDisplay, hintsEnabled);
                     startTimer();
                 }
             });
@@ -401,6 +604,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             .then(response => response.json())
             .then(data => {
                 updateStatus(data.message, data.success ? 'success' : 'error');
+                updateHintDisplay(data.hintDisplay, document.getElementById('hintsEnabled').checked);
                 
                 if (data.gameSession && data.gameSession.guesses.length > 0) {
                     updateGuessList(data.gameSession.guesses);
@@ -436,6 +640,16 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             status.className = 'status ' + type;
         }
 
+        function updateHintDisplay(hintText, hintsEnabled) {
+            const hintDisplay = document.getElementById('hintDisplay');
+            if (hintsEnabled && hintText) {
+                hintDisplay.textContent = 'ヒント: ' + hintText;
+                hintDisplay.style.display = 'block';
+            } else {
+                hintDisplay.style.display = 'none';
+            }
+        }
+
         function startTimer() {
             let timeLeft = 30;
             
@@ -464,6 +678,8 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                     document.getElementById('timer').textContent = '残り時間: ' + data.timeRemaining.toString().padStart(2, '0') + '秒';
                 }
                 
+                updateHintDisplay(data.hintDisplay, document.getElementById('hintsEnabled').checked);
+                
                 if (data.gameSession && data.gameSession.gameOver) {
                     if (!data.success && data.message) {
                         updateStatus(data.message, 'error');
@@ -483,6 +699,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
             document.getElementById('guessBtn').disabled = true;
             document.getElementById('startBtn').disabled = false;
             document.getElementById('lengthSelect').disabled = false;
+            document.getElementById('hintsEnabled').disabled = false;
         }
     </script>
 </body>
