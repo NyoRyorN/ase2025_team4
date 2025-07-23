@@ -118,9 +118,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 			resp = GameResponse{Success: false, Message: "文字数は1-10の間で選択してください"}
 		} else {
 			currentGame = startNewGame(req.StringLength)
+			fmt.Printf("新しいゲーム開始: 文字数=%d, 正解=%s\n", currentGame.StringLength, currentGame.CorrectString)
 			resp = GameResponse{
 				Success:       true,
-				Message:       "ゲームを開始しました",
+				Message:       fmt.Sprintf("ゲームを開始しました（%d文字）", req.StringLength),
 				GameSession:   currentGame,
 				TimeRemaining: currentGame.getRemainingTime(),
 			}
@@ -134,6 +135,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		} else if currentGame.isTimeUp() {
 			currentGame.GameOver = true
 			currentGame.Won = false
+			fmt.Printf("時間切れ: 正解は %s でした\n", currentGame.CorrectString)
 			resp = GameResponse{
 				Success:       false,
 				Message:       fmt.Sprintf("時間切れです！正解は: %s", currentGame.CorrectString),
@@ -180,6 +182,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 					if hits == currentGame.StringLength {
 						currentGame.GameOver = true
 						currentGame.Won = true
+						fmt.Printf("正解！答えは %s でした\n", currentGame.CorrectString)
 						resp = GameResponse{
 							Success:       true,
 							Message:       "🎉 おめでとうございます！正解です！",
@@ -204,6 +207,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		} else if currentGame.isTimeUp() && !currentGame.GameOver {
 			currentGame.GameOver = true
 			currentGame.Won = false
+			fmt.Printf("ステータス確認で時間切れ検出: 正解は %s でした\n", currentGame.CorrectString)
 			resp = GameResponse{
 				Success:       false,
 				Message:       fmt.Sprintf("時間切れです！正解は: %s", currentGame.CorrectString),
@@ -461,7 +465,12 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                 }
                 
                 if (data.gameSession && data.gameSession.gameOver) {
-                    updateStatus(data.message, data.gameSession.won ? 'success' : 'error');
+                    if (!data.success && data.message) {
+                        updateStatus(data.message, 'error');
+                    }
+                    endGame();
+                } else if (!data.success && data.message) {
+                    updateStatus(data.message, 'error');
                     endGame();
                 }
             });
