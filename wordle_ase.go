@@ -403,7 +403,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	tmpl := `<!DOCTYPE html>
 <html>
 <head>
-    <title>Hit and Blow Game</title>
+    <title>Word Detective</title>
     <meta charset="UTF-8">
     <style>
         body {
@@ -514,7 +514,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div class="container">
-        <h1>🎯 Hit and Blow Game</h1>
+        <h1>🎯 Word Detective</h1>
         
         <div class="game-setup">
             <div class="setup-row">
