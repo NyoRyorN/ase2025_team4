@@ -35,7 +35,7 @@ type Guess struct {
 	Input string `json:"input"`
 	Hits  int    `json:"hits"`
 	Blows int    `json:"blows"`
-	Time  string `json:"time"`
+	// Time  string `json:"time"`
 }
 
 type GameRequest struct {
@@ -261,7 +261,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 			currentGame = startNewGame(req.StringLength, req.HintsEnabled)
 			resp = GameResponse{
 				Success:       true,
-				Message:       fmt.Sprintf("ゲームを開始しました（%d文字、ヒント: %v）", req.StringLength, req.HintsEnabled),
+				Message:       fmt.Sprintf("ゲームを開始しました"),
 				GameSession:   currentGame,
 				TimeRemaining: currentGame.getRemainingTime(),
 				HintDisplay:   currentGame.getHintDisplay(),
@@ -337,7 +337,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 						Input: userInput,
 						Hits:  hits,
 						Blows: blows,
-						Time:  time.Now().Format("15:04:05"),
+						// Time:  time.Now().Format("15:04:05"),
 					}
 					currentGame.Guesses = append(currentGame.Guesses, guess)
 
@@ -398,7 +398,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	tmpl := `<!DOCTYPE html>
 <html>
 <head>
-    <title>Hit and Blow Game</title>
+    <title>Word Detective</title>
     <meta charset="UTF-8">
     <style>
         body {
@@ -509,7 +509,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div class="container">
-        <h1>🎯 Hit and Blow Game</h1>
+        <h1>🕵️ Word Detective</h1>
         
         <div class="game-setup">
             <div class="setup-row">
@@ -623,8 +623,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
                 div.className = 'guess-item';
                 div.innerHTML = 
                     '<span class="guess-input">' + guess.input + '</span>' +
-                    '<span class="guess-result">' + guess.hits + ' Hit(s), ' + guess.blows + ' Blow(s)</span>' +
-                    '<span>' + guess.time + '</span>';
+                    '<span class="guess-result">' + guess.hits + ' Hit(s), ' + guess.blows + ' Blow(s)</span>';
                 guessList.appendChild(div);
             });
         }
@@ -709,7 +708,7 @@ func main() {
 	http.HandleFunc("/api", handleAPI)
 
 	fmt.Println("Hit and Blow Game サーバーを開始します...")
-	fmt.Println("ブラウザで http://localhost:8080 にアクセスしてください")
+	fmt.Println("ブラウザで http://localhost:8081 にアクセスしてください")
 	
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8081", nil))
 }
